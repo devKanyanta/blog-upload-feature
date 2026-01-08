@@ -4,9 +4,7 @@ const API_BASE_URL = 'http://localhost:5000/api';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
+  timeout: 10000,
 });
 
 // Add request interceptor for auth tokens
@@ -27,12 +25,26 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response.data,
   (error) => {
+    const errorMessage = error.response?.data?.error || 
+                        error.response?.data?.message || 
+                        error.message || 
+                        'Something went wrong';
+    
+    // Handle 401 Unauthorized
     if (error.response?.status === 401) {
-      // Handle unauthorized
       localStorage.removeItem('token');
+      localStorage.removeItem('user');
       window.location.href = '/login';
     }
-    return Promise.reject(error.response?.data || error.message);
+
+    // Handle 403 Forbidden
+    if (error.response?.status === 403) {
+      return Promise.reject({ 
+        error: 'Access denied. You do not have permission to perform this action.' 
+      });
+    }
+
+    return Promise.reject({ error: errorMessage });
   }
 );
 
@@ -56,13 +68,15 @@ export const blogApi = {
     
     // Append text fields
     Object.keys(blogData).forEach(key => {
-      if (key !== 'featured_image') {
+      if (key !== 'featured_image' && blogData[key] !== undefined && blogData[key] !== null) {
         formData.append(key, blogData[key]);
       }
     });
     
     // Append image if exists
     if (blogData.featured_image instanceof File) {
+      formData.append('featured_image', blogData.featured_image);
+    } else if (blogData.featured_image) {
       formData.append('featured_image', blogData.featured_image);
     }
 
@@ -79,13 +93,15 @@ export const blogApi = {
     
     // Append text fields
     Object.keys(blogData).forEach(key => {
-      if (key !== 'featured_image') {
+      if (key !== 'featured_image' && blogData[key] !== undefined && blogData[key] !== null) {
         formData.append(key, blogData[key]);
       }
     });
     
     // Append image if it's a new file
     if (blogData.featured_image instanceof File) {
+      formData.append('featured_image', blogData.featured_image);
+    } else if (blogData.featured_image !== undefined) {
       formData.append('featured_image', blogData.featured_image);
     }
 
@@ -110,11 +126,11 @@ export const blogApi = {
         'Content-Type': 'multipart/form-data',
       },
     });
-  }
-};
+  },
 
-// Health check
-export const checkHealth = () => 
-  api.get('/health');
+  // Health check
+  checkHealth: () => 
+    api.get('/health')
+};
 
 export default api;

@@ -117,56 +117,101 @@ const BlogForm = () => {
     }
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    
-    if (!validateForm()) {
-      toast.error('Please fix the errors in the form');
-      return;
-    }
-
+  // Add this function to extract base64 images from content and convert them to files
+const extractAndConvertBase64Images = async (htmlContent) => {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(htmlContent, 'text/html');
+  const images = doc.querySelectorAll('img[src^="data:image"]');
+  
+  let updatedContent = htmlContent;
+  
+  for (const img of images) {
+    const base64Data = img.src;
     try {
-      setLoading(true);
+      // Convert base64 to blob
+      const response = await fetch(base64Data);
+      const blob = await response.blob();
       
-      // Prepare blog data
-      const blogData = {
-        title: formData.title,
-        content: formData.content,
-        status: formData.status,
-        video_url: formData.video_url,
-        meta_title: formData.meta_title || formData.title,
-        meta_description: formData.meta_description || generateExcerpt(formData.content)
-      };
-
-      // Handle featured image
-      if (formData.featured_image instanceof File) {
-        blogData.featured_image = formData.featured_image;
-      } else if (formData.featured_image && typeof formData.featured_image === 'string') {
-        // Keep existing image URL
-        blogData.featured_image = formData.featured_image;
-      }
-
-      let response;
-      if (isEditMode) {
-        response = await blogApi.updateBlog(id, blogData);
-        toast.success('Blog updated successfully!');
-      } else {
-        response = await blogApi.createBlog(blogData);
-        toast.success('Blog created successfully!');
-      }
+      // Create file from blob
+      const fileName = `image-${Date.now()}.${blob.type.split('/')[1]}`;
+      const file = new File([blob], fileName, { type: blob.type });
       
-      if (response.success) {
-        navigate('/');
-      } else {
-        throw new Error(response.error || 'Failed to save blog');
+      // Upload the file
+      const uploadResult = await blogApi.uploadImage(file);
+      
+      if (uploadResult.success) {
+        // Replace base64 with uploaded URL in content
+        updatedContent = updatedContent.replace(base64Data, uploadResult.data.url);
       }
     } catch (error) {
-      console.error('Error saving blog:', error);
-      toast.error(error.error || error.message || 'Failed to save blog. Please try again.');
-    } finally {
-      setLoading(false);
+      console.error('Failed to convert base64 image:', error);
     }
-  };
+  }
+  
+  return updatedContent;
+};
+
+// Update the handleSubmit function to process base64 images before saving
+const handleSubmit = async (e) => {
+  e.preventDefault();
+  
+  if (!validateForm()) {
+    toast.error('Please fix the errors in the form');
+    return;
+  }
+
+  try {
+    setLoading(true);
+    
+    // Process content to handle base64 images
+    let processedContent = formData.content;
+    
+    // Check if content contains base64 images
+    if (formData.content.includes('data:image')) {
+      toast.loading('Processing images...');
+      processedContent = await extractAndConvertBase64Images(formData.content);
+      toast.dismiss();
+    }
+    
+    // Prepare blog data
+    const blogData = {
+      title: formData.title,
+      content: processedContent,
+      status: formData.status,
+      video_url: formData.video_url,
+      meta_title: formData.meta_title || formData.title,
+      meta_description: formData.meta_description || generateExcerpt(processedContent)
+    };
+
+    // Handle featured image
+    if (formData.featured_image instanceof File) {
+      blogData.featured_image = formData.featured_image;
+    } else if (formData.featured_image && typeof formData.featured_image === 'string') {
+      // Keep existing image URL
+      blogData.featured_image = formData.featured_image;
+    }
+
+    let response;
+    if (isEditMode) {
+      response = await blogApi.updateBlog(id, blogData);
+      toast.success('Blog updated successfully!');
+    } else {
+      response = await blogApi.createBlog(blogData);
+      toast.success('Blog created successfully!');
+    }
+    
+    if (response.success) {
+      navigate('/');
+    } else {
+      throw new Error(response.error || 'Failed to save blog');
+    }
+  } catch (error) {
+    console.error('Error saving blog:', error);
+    toast.error(error.error || error.message || 'Failed to save blog. Please try again.');
+  } finally {
+    setLoading(false);
+  }
+};
 
   if (loading && isEditMode) {
     return (
