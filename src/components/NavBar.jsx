@@ -44,9 +44,6 @@ const Navbar = () => {
   }
 
   const profileMenuItems = [
-    { icon: <User className="h-4 w-4" />, label: 'Profile', onClick: () => {} },
-    { icon: <Settings className="h-4 w-4" />, label: 'Settings', onClick: () => {} },
-    { divider: true },
     { icon: <LogOut className="h-4 w-4" />, label: 'Logout', onClick: handleLogout, danger: true },
   ];
 
